@@ -71,7 +71,7 @@ docker run --gpus all \
 
 The GitHub Actions workflow (`.github/workflows/docker-bonsai.yml`) builds and pushes the image to
 `ghcr.io/bmaltais/prism-ml-llama.cpp:bonsai-dgx` on every push to `master`.
-Requires an `NGC_API_KEY` repository secret (ngc.nvidia.com → Setup → API Keys).
+No secrets required — `nvcr.io/nvidia/pytorch` is publicly pullable and `GITHUB_TOKEN` is auto-provided.
 
 # llama.cpp
 

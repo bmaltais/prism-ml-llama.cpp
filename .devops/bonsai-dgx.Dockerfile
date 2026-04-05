@@ -1,10 +1,11 @@
 # =============================================================================
 # Bonsai 1-bit llama.cpp – DGX Spark / GB10 (Blackwell sm_121)
 # Base:  nvcr.io/nvidia/pytorch:25.10-py3  (NGC-optimised for DGX hardware)
+# Publicly pullable – no NGC credentials required.
 # Multi-stage: heavy PyTorch builder → lean server runtime
 # =============================================================================
 
-# Override at build time to target a different NGC image or CUDA arch, e.g.:
+# Override at build time, e.g.:
 #   docker build --build-arg CUDA_DOCKER_ARCH="89;90;121" ...
 # When building ON the DGX Spark itself, pass --build-arg GGML_NATIVE=ON to
 # enable -march=native for the CPU backend (negligible gain with -ngl 99).
@@ -12,8 +13,7 @@ ARG PYTORCH_IMAGE=nvcr.io/nvidia/pytorch:25.10-py3
 # sm_121 = Blackwell (DGX Spark GB10). Separate multiple archs with ';'.
 ARG CUDA_DOCKER_ARCH=121
 # OFF is correct for CI (build machine ≠ target). ON is safe when building
-# directly on DGX Spark. GGML_CPU_ALL_VARIANTS=ON handles runtime dispatch
-# when OFF, so native CPU perf is still achieved.
+# directly on DGX Spark.
 ARG GGML_NATIVE=OFF
 
 # ── Builder ───────────────────────────────────────────────────────────────────
@@ -49,8 +49,6 @@ RUN mkdir -p /app/lib && \
 
 # ── Runtime ───────────────────────────────────────────────────────────────────
 # Re-use the same NGC base so DGX Spark driver compatibility is preserved.
-# For a much leaner image (trading DGX-specific tuning), swap this base for:
-#   nvcr.io/nvidia/cuda:13.x-runtime-ubuntu24.04
 FROM ${PYTORCH_IMAGE} AS runtime
 
 LABEL org.opencontainers.image.source="https://github.com/PrismML-Eng/llama.cpp"
