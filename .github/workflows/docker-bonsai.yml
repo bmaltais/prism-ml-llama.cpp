@@ -1,0 +1,113 @@
+name: Build & Publish Bonsai DGX Docker Image
+
+# Builds .devops/bonsai-dgx.Dockerfile and pushes to ghcr.io.
+# Required repository secrets:
+#   NGC_API_KEY  – NGC API key to pull nvcr.io/nvidia/pytorch base image
+#                  (create at https://ngc.nvidia.com → Setup → API Keys)
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      push:
+        description: 'Push built image to ghcr.io'
+        required: false
+        default: 'true'
+        type: boolean
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  # sm_121 = Blackwell (DGX Spark GB10).
+  # Override via workflow_dispatch re-run or fork variable to target other GPUs.
+  CUDA_DOCKER_ARCH: "121"
+  DOCKERFILE: .devops/bonsai-dgx.Dockerfile
+
+jobs:
+  build-and-push:
+    name: Build Bonsai DGX image
+    # DGX Spark GB10 is ARM64 (72× Arm Neoverse V2 + Blackwell GPU).
+    # Must build linux/arm64 — an amd64 image will not run on it natively.
+    # ubuntu-24.04-arm is a GitHub-hosted ARM64 runner; no self-hosted runner needed.
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      # ── Free up disk space first; the NGC PyTorch base image is ~20 GB ──────
+      - name: Free disk space
+        uses: ggml-org/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+
+      # nvcr.io requires NGC credentials even to pull public images.
+      # Username must be the literal string "$oauthtoken" per NGC documentation.
+      - name: Log in to NGC Container Registry
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4
+        with:
+          registry: nvcr.io
+          username: "$oauthtoken"
+          password: ${{ secrets.NGC_API_KEY }}
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@902fa8ec7d6ecbea8a986b4b88c83de36ed3e9a0 # v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # rolling tag on default branch
+            type=raw,value=bonsai-dgx,enable={{is_default_branch}}
+            # short-sha tag for every build
+            type=sha,prefix=bonsai-dgx-,format=short
+            # semver tags on git tag pushes (e.g. v1.2.3 → bonsai-dgx-1.2.3)
+            type=semver,pattern=bonsai-dgx-{{version}}
+            type=semver,pattern=bonsai-dgx-{{major}}.{{minor}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
+        with:
+          context: .
+          file: ${{ env.DOCKERFILE }}
+          target: runtime
+          platforms: linux/arm64
+          # Push unless this is a manual run where the user opted out
+          push: ${{ github.event_name != 'workflow_dispatch' || inputs.push == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            CUDA_DOCKER_ARCH=${{ env.CUDA_DOCKER_ARCH }}
+          # Registry cache avoids rebuilding unchanged layers across runs
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-bonsai-dgx
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-bonsai-dgx,mode=max
+          provenance: false

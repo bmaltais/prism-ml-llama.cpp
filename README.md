@@ -27,10 +27,9 @@ cmake --build build --config Release -j 20
 
 ### Run the model
 ```bash
-# Llama cli
+# Llama CLI
 ./build/bin/llama-cli \
-    -hf prism-ml/Bonsai-8B-gguf \
-    -hft hf_ii4rnfi4hfi4 \
+    --hf-repo prism-ml/Bonsai-8B-gguf \
     -p "Explain quantum computing in simple terms." \
     -n 256 \
     --temp 0.5 \
@@ -38,16 +37,41 @@ cmake --build build --config Release -j 20
     --top-k 20 \
     -ngl 99
 
-# llama server
+# llama server (OpenAI-compatible API + Web UI)
 ./build/bin/llama-server \
-    -hf prism-ml/Bonsai-8B-gguf \
-    -hft hf_ii4rnfi4hfi4 \
-    -p "Explain quantum computing in simple terms." \
+    --hf-repo prism-ml/Bonsai-8B-gguf \
     --host 0.0.0.0 \
     --port 8080 \
-    -ngl 99
-    --ctx-size 65536
+    --ctx-size 65536 \
+    -ngl 99 \
+    --webui-mcp-proxy
 ```
+
+### Run with Docker (DGX Spark / Blackwell GB10)
+
+Pre-built image targets `linux/arm64`, CUDA `sm_121a` (Blackwell native FP4).
+
+```bash
+# Build locally (on the DGX Spark itself)
+docker build \
+  -f .devops/bonsai-dgx.Dockerfile \
+  --build-arg GGML_NATIVE=ON \
+  -t bonsai-dgx:local .
+
+# Run – downloads model on first use, uses cache on subsequent runs
+docker run --gpus all \
+  -v ~/.cache/huggingface:/root/.cache/huggingface \
+  -p 8080:8080 \
+  bonsai-dgx:local \
+  --hf-repo prism-ml/Bonsai-8B-gguf \
+  --ctx-size 65536 -ngl 99 \
+  --webui-mcp-proxy \
+  --host 0.0.0.0
+```
+
+The GitHub Actions workflow (`.github/workflows/docker-bonsai.yml`) builds and pushes the image to
+`ghcr.io/bmaltais/prism-ml-llama.cpp:bonsai-dgx` on every push to `master`.
+Requires an `NGC_API_KEY` repository secret (ngc.nvidia.com → Setup → API Keys).
 
 # llama.cpp
 
