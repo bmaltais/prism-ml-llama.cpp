@@ -6,28 +6,31 @@
 > to support the [Bonsai 1-bit models](https://huggingface.co/prism-ml/Bonsai-8B-gguf)
 >
 > Note: this is not an official fork and is not supported by the Prism-ML team - this is just a personal fork to demo Bonsai until official support is added
+> This fork was adapted to work on the DGX Spark variants.
 
 
 ## How to use this fork
 
 ```bash
-# On MacOS
+# On DGX Spark and variant
 git clone https://github.com/Mintplex-Labs/prism-ml-llama.cpp
 cd prism-ml-llama.cpp
-cmake -B build && cmake --build build -j
-```
 
-### You __must__ recode the public Bonsai 1-bit models to work with this fork
-```bash
-# Download the public Bonsai 1-bit models
-wget https://huggingface.co/prism-ml/Bonsai-8B-gguf/resolve/main/Bonsai-8B.gguf -O Bonsai-8B.gguf
+cmake -B build \
+  -DLLAMA_OPENSSL=ON \
+  -DGGML_CUDA=ON \
+  -DLLAMA_CURL=ON \
+  -DCMAKE_BUILD_TYPE=Release
+
+cmake --build build --config Release -j 20
 ```
 
 ### Run the model
 ```bash
 # Llama cli
 ./build/bin/llama-cli \
-    -m Bonsai-8B.gguf \
+    -hf prism-ml/Bonsai-8B-gguf \
+    -hft hf_ii4rnfi4hfi4 \
     -p "Explain quantum computing in simple terms." \
     -n 256 \
     --temp 0.5 \
@@ -37,7 +40,9 @@ wget https://huggingface.co/prism-ml/Bonsai-8B-gguf/resolve/main/Bonsai-8B.gguf 
 
 # llama server
 ./build/bin/llama-server \
-    -m Bonsai-8B.gguf \
+    -hf prism-ml/Bonsai-8B-gguf \
+    -hft hf_ii4rnfi4hfi4 \
+    -p "Explain quantum computing in simple terms." \
     --host 0.0.0.0 \
     --port 8080 \
     -ngl 99
